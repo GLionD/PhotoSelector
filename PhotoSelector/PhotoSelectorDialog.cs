@@ -164,8 +164,6 @@ namespace PhotoSelector
                     count += Directory.GetFiles(directory, "*.png", SearchOption.AllDirectories).Length;
                 }
 
-                count = count * 2;
-
                 this.Enabled = false;
                 await Task.Run(() =>
                 {
@@ -213,56 +211,40 @@ namespace PhotoSelector
 
                 List<ListViewItemPhoto> sortedPhotos = allPhotos.OrderBy(o => o.Date).ToList();
                 Image.GetThumbnailImageAbort callback = new Image.GetThumbnailImageAbort(ThumbnailCallback);
-
-                for (int i = 0; i < sortedPhotos.Count; i++)
+                Invoke(new Action(() =>
                 {
-                    double percentage = (double)Math.Min(decimal.Divide(step, totalSteps), 1);
-                    progress.Report((double)(percentage * 100));
-                    step++;
+                    listView1.SuspendLayout();
+                    listView1.SmallImageList = new ImageList();
+                    listView1.SmallImageList.ImageSize = new Size(75, 75);
+                    listView1.SmallImageList.ColorDepth = ColorDepth.Depth32Bit;
 
-                    Image thumbNail = GetThumbnail(sortedPhotos[i].FilePath);
-                    if (thumbNail == null)
+                    for (int i = 0; i < sortedPhotos.Count; i++)
                     {
-                        continue;
-                    }
-                    listView1.SmallImageList.Images.Add(thumbNail);
-
-                    ListViewItemPhoto item = sortedPhotos[i];
-                    item.ImageIndex = i;
-                    item.Text = Path.GetFileName(sortedPhotos[i].FilePath);
-                    item.SubItems.Add(item.Date.ToString("dd-MM-yyyy HH:mm:ss"));
-                    if (this.listView1.InvokeRequired)
-                    {
-                        Invoke(new Action(() =>
+                        Image thumbNail = GetThumbnail(sortedPhotos[i].FilePath);
+                        if (thumbNail == null)
                         {
-                            listView1.Items.Add(item);
-                        }));
-                    }
-                    else
-                    {
-                        listView1.Items.Add(item);
-                    }
-
-                }
-                if (this.listView1.InvokeRequired)
-                {
-                    Invoke(new Action(() =>
-                    {
-                        listView1.AutoResizeColumns(ColumnHeaderAutoResizeStyle.ColumnContent);
-                        if (listView1.Items.Count > 0)
-                        {
-                            listView1.Items[0].Selected = true;
+                            continue;
                         }
-                    }));
-                }
-                else
-                {
+                        listView1.SmallImageList.Images.Add(thumbNail);
+
+                        ListViewItemPhoto item = sortedPhotos[i];
+                        item.ImageIndex = i;
+                        item.Text = Path.GetFileName(sortedPhotos[i].FilePath);
+                        item.SubItems.Add(item.Date.ToString("dd-MM-yyyy HH:mm:ss"));
+
+                        listView1.Items.Add(item);
+
+
+                    }
+
                     listView1.AutoResizeColumns(ColumnHeaderAutoResizeStyle.ColumnContent);
                     if (listView1.Items.Count > 0)
                     {
                         listView1.Items[0].Selected = true;
                     }
-                }
+                    listView1.ResumeLayout();
+
+                }));
             }
             catch (Exception ex)
             {
@@ -356,7 +338,15 @@ namespace PhotoSelector
                     progressBar1.Value = (int)percent;
                 });
 
-                int count = listView1.SelectedItems.Count;
+                int count = 0;
+
+                foreach (ListViewItem item in listView1.Items)
+                {
+                    if (item.Checked)
+                    {
+                        count++;
+                    }
+                }
 
 
 
@@ -369,6 +359,7 @@ namespace PhotoSelector
                 progressBar1.Value = 0;
                 this.Enabled = true;
 
+                MessageBox.Show($"Copied {count} photos to {dialog.FileName}");
             }
         }
 
@@ -376,39 +367,7 @@ namespace PhotoSelector
         {
             int step = 0;
             UniqueName uniqueName = new UniqueName();
-            if (this.listView1.InvokeRequired)
-            {
-                Invoke(new Action(() =>
-                {
-                    foreach (ListViewItemPhoto item in listView1.Items)
-                    {
-                        if (item.Checked)
-                        {
-                            double percentage = (double)Math.Min(decimal.Divide(step, totalSteps), 1);
-                            progress.Report((double)(percentage * 100));
-                            step++;
-
-                            string sourceFileName = Path.GetFileName(item.FilePath);
-                            string ext = Path.GetExtension(item.FilePath);
-                            string cleanFileName = Path.GetFileNameWithoutExtension(item.FilePath);
-                            string newPath = path + @"\" + sourceFileName;
-
-                            while (true)
-                            {
-                                if (File.Exists(newPath))
-                                {
-                                    cleanFileName = uniqueName.GetNext(cleanFileName);
-                                    newPath = path + @"\" + cleanFileName + ext;
-                                }
-                                else break;
-                            }
-                            File.Copy(item.FilePath, newPath);
-                        }
-                    }
-
-                }));
-            }
-            else
+            Invoke(new Action(() =>
             {
                 foreach (ListViewItemPhoto item in listView1.Items)
                 {
@@ -436,7 +395,7 @@ namespace PhotoSelector
                     }
                 }
 
-            }
+            }));
         }
 
 
