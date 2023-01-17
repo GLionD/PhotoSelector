@@ -1,6 +1,7 @@
 ﻿using Microsoft.WindowsAPICodePack.Dialogs;
 using System;
 using System.Collections.Generic;
+using System.Collections.Concurrent;
 using System.ComponentModel;
 using System.Data;
 using System.Drawing;
@@ -183,32 +184,37 @@ namespace PhotoSelector
             int step = 0;
             try
             {
-                List<ListViewItemPhoto> allPhotos = new List<ListViewItemPhoto>();
+                ConcurrentBag<ListViewItemPhoto> allPhotos = new ConcurrentBag<ListViewItemPhoto>();
 
+                List<string> photoPaths = new List<string>();
                 foreach (var folder in folderNames)
                 {
                     foreach (var item in Directory.GetFiles(folder, "*.*", SearchOption.AllDirectories))
                     {
                         if (item.ToLower().EndsWith(".jpg") || item.ToLower().EndsWith(".jpeg") || item.ToLower().EndsWith(".png"))
                         {
-                            double percentage = (double)Math.Min(decimal.Divide(step, totalSteps), 1);
-                            progress.Report((double)(percentage * 100));
-                            step++;
-                            ListViewItemPhoto listViewItemPhoto = new ListViewItemPhoto();
-                            listViewItemPhoto.FilePath = item;
-                            try
-                            {
-                                listViewItemPhoto.Date = GetDateTakenFromImage(item);
-                            }
-                            catch
-                            {
-                                listViewItemPhoto.Date = new FileInfo(item).LastWriteTime;
-                            }
-                            allPhotos.Add(listViewItemPhoto);
+                            photoPaths.Add(item);
                         }
                     }
                 }
+                Parallel.ForEach(photoPaths, item =>
+                {
+                    double percentage = (double)Math.Min(decimal.Divide(step, totalSteps), 1);
+                    progress.Report((double)(percentage * 100));
+                    step++;
+                    ListViewItemPhoto listViewItemPhoto = new ListViewItemPhoto();
+                    listViewItemPhoto.FilePath = item;
+                    try
+                    {
+                        listViewItemPhoto.Date = GetDateTakenFromImage(item);
+                    }
+                    catch
+                    {
+                        listViewItemPhoto.Date = new FileInfo(item).LastWriteTime;
+                    }
+                    allPhotos.Add(listViewItemPhoto);
 
+                });
                 List<ListViewItemPhoto> sortedPhotos = allPhotos.OrderBy(o => o.Date).ToList();
                 Image.GetThumbnailImageAbort callback = new Image.GetThumbnailImageAbort(ThumbnailCallback);
                 Invoke(new Action(() =>
@@ -218,17 +224,19 @@ namespace PhotoSelector
                     listView1.SmallImageList.ImageSize = new Size(75, 75);
                     listView1.SmallImageList.ColorDepth = ColorDepth.Depth32Bit;
 
+                    int skipped = 0;
                     for (int i = 0; i < sortedPhotos.Count; i++)
                     {
                         Image thumbNail = GetThumbnail(sortedPhotos[i].FilePath);
                         if (thumbNail == null)
                         {
+                            skipped++;
                             continue;
                         }
                         listView1.SmallImageList.Images.Add(thumbNail);
 
                         ListViewItemPhoto item = sortedPhotos[i];
-                        item.ImageIndex = i;
+                        item.ImageIndex = i - skipped;
                         item.Text = Path.GetFileName(sortedPhotos[i].FilePath);
                         item.SubItems.Add(item.Date.ToString("dd-MM-yyyy HH:mm:ss"));
 
