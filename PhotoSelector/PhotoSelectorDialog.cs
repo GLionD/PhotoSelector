@@ -12,7 +12,7 @@ using System.Windows.Forms;
 using System.IO;
 using System.Text.RegularExpressions;
 using System.Drawing.Imaging;
-
+using ExifLib;
 
 namespace PhotoSelector
 {
@@ -21,8 +21,9 @@ namespace PhotoSelector
         public PhotoSelectorDialog()
         {
             InitializeComponent();
-            listView1.Columns.Add("Name");
+            var c1= listView1.Columns.Add("Name");
             listView1.Columns.Add("Date");
+
 
             listView1.CheckBoxes = true;
             listView1.View = View.Details;
@@ -197,8 +198,10 @@ namespace PhotoSelector
                         }
                     }
                 }
-                Parallel.ForEach(photoPaths, item =>
+                for (int i = 0; i < photoPaths.Count; i++)
                 {
+                    var item = photoPaths[i];
+
                     double percentage = (double)Math.Min(decimal.Divide(step, totalSteps), 1);
                     progress.Report((double)(percentage * 100));
                     step++;
@@ -214,43 +217,48 @@ namespace PhotoSelector
                     }
                     allPhotos.Add(listViewItemPhoto);
 
-                });
+                }
                 List<ListViewItemPhoto> sortedPhotos = allPhotos.OrderBy(o => o.Date).ToList();
                 Image.GetThumbnailImageAbort callback = new Image.GetThumbnailImageAbort(ThumbnailCallback);
                 Invoke(new Action(() =>
                 {
                     listView1.SuspendLayout();
+                    listView1.BeginUpdate();
                     listView1.SmallImageList = new ImageList();
                     listView1.SmallImageList.ImageSize = new Size(75, 75);
                     listView1.SmallImageList.ColorDepth = ColorDepth.Depth32Bit;
 
+
+                    List<ListViewItem> items = new List<ListViewItem>();
                     int skipped = 0;
                     for (int i = 0; i < sortedPhotos.Count; i++)
                     {
-                        Image thumbNail = GetThumbnail(sortedPhotos[i].FilePath);
-                        if (thumbNail == null)
+                        using (Image thumbNail = GetThumbnail(sortedPhotos[i].FilePath))
                         {
-                            skipped++;
-                            continue;
+                            if (thumbNail == null)
+                            {
+                                skipped++;
+                                continue;
+                            }
+                            listView1.SmallImageList.Images.Add(thumbNail);
+
+                            ListViewItemPhoto item = sortedPhotos[i];
+                            item.ImageIndex = i - skipped;
+                            item.Text = Path.GetFileName(sortedPhotos[i].FilePath);
+                            item.SubItems.Add(item.Date.ToString("dd-MM-yyyy HH:mm:ss"));
+
+                            items.Add(item);
                         }
-                        listView1.SmallImageList.Images.Add(thumbNail);
-
-                        ListViewItemPhoto item = sortedPhotos[i];
-                        item.ImageIndex = i - skipped;
-                        item.Text = Path.GetFileName(sortedPhotos[i].FilePath);
-                        item.SubItems.Add(item.Date.ToString("dd-MM-yyyy HH:mm:ss"));
-
-                        listView1.Items.Add(item);
-
 
                     }
-
+                    listView1.Items.AddRange(items.ToArray());
                     listView1.AutoResizeColumns(ColumnHeaderAutoResizeStyle.ColumnContent);
                     if (listView1.Items.Count > 0)
                     {
                         listView1.Items[0].Selected = true;
                     }
                     listView1.ResumeLayout();
+                    listView1.EndUpdate();
 
                 }));
             }
@@ -263,14 +271,26 @@ namespace PhotoSelector
         private  Regex r = new Regex(":");
         public DateTime GetDateTakenFromImage(string path)
         {
-            using (FileStream fs = new FileStream(path, FileMode.Open, FileAccess.Read))
-            using (Image myImage = Image.FromStream(fs, false, false))
+            using (ExifReader reader = new ExifReader(path))
             {
-                PropertyItem propItem = myImage.GetPropertyItem(36867);
-                string dateTaken = r.Replace(Encoding.UTF8.GetString(propItem.Value), "-", 2);
-                return DateTime.Parse(dateTaken);
+                // Extract the tag data using the ExifTags enumeration
+                DateTime datePictureTaken;
+                if (reader.GetTagValue<DateTime>(ExifTags.DateTimeDigitized, out datePictureTaken))
+                {
+                    return datePictureTaken;
+                }
             }
+            return new FileInfo(path).LastWriteTime;
         }
+
+        //    using (FileStream fs = new FileStream(path, FileMode.Open, FileAccess.Read))
+        //    using (Image myImage = Image.FromStream(fs, false, false))
+        //    {
+        //        PropertyItem propItem = myImage.GetPropertyItem(36867);
+        //        string dateTaken = r.Replace(Encoding.UTF8.GetString(propItem.Value), "-", 2);
+        //        return DateTime.Parse(dateTaken);
+        //    }
+        //}
 
         private const int THUMBNAIL_DATA = 0x501B;
 
