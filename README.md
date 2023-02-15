@@ -2,7 +2,7 @@
 PhotoSelector is a simple application to select multiple pictures from multiple folders, and copy the selection to a destination folder.
 
 # How to use?
-Download the [build](https://github.com/GLionD/PhotoSelector/blob/master/PhotoSelector/bin/Release/PhotoSelector.exe) of the application or clone the repository.  
+Download the [build](PhotoSelector/bin/Release/PhotoSelector.exe) of the application or clone the repository.  
 When you start the application you see this window:
 
 ![PhotoSelector](PhotoSelector/PhotoSelector.png)
