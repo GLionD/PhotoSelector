@@ -3,6 +3,7 @@ PhotoSelector is a simple application to select multiple pictures from multiple 
 
 # How to use?
 Download the [build](https://github.com/GLionD/PhotoSelector/raw/master/PhotoSelector/bin/Release/PhotoSelector.exe) of the application or clone the repository.  
+You might see security warnings when you download the executable, these can be ignored.
 When you start the application you see this window:
 
 ![PhotoSelector](PhotoSelector/PhotoSelector.png)
