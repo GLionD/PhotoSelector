@@ -13,6 +13,7 @@ using System.IO;
 using System.Text.RegularExpressions;
 using System.Drawing.Imaging;
 using ExifLib;
+using System.Diagnostics;
 
 namespace PhotoSelector
 {
@@ -131,8 +132,11 @@ namespace PhotoSelector
                 if (listView1.SelectedItems.Count>0)
                 {
                     ListViewItemPhoto item = listView1.SelectedItems[0] as ListViewItemPhoto;
-                    photoBox.Image = Image.FromFile(item.FilePath);
-                    photoBox.Checked = item.Checked;
+                    using (var img = Image.FromFile(item.FilePath))
+                    {
+                        photoBox.Image = Image.FromFile(item.FilePath);
+                        photoBox.Checked = item.Checked;
+                    }
                 }
             }
         }
@@ -233,21 +237,28 @@ namespace PhotoSelector
                     int skipped = 0;
                     for (int i = 0; i < sortedPhotos.Count; i++)
                     {
-                        using (Image thumbNail = GetThumbnail(sortedPhotos[i].FilePath))
+                        try
                         {
-                            if (thumbNail == null)
+                            using (Image thumbNail = GetThumbnail(sortedPhotos[i].FilePath))
                             {
-                                skipped++;
-                                continue;
+                                if (thumbNail == null)
+                                {
+                                    skipped++;
+                                    continue;
+                                }
+                                listView1.SmallImageList.Images.Add(thumbNail);
+
+                                ListViewItemPhoto item = sortedPhotos[i];
+                                item.ImageIndex = i - skipped;
+                                item.Text = Path.GetFileName(sortedPhotos[i].FilePath);
+                                item.SubItems.Add(item.Date.ToString("dd-MM-yyyy HH:mm:ss"));
+
+                                items.Add(item);
                             }
-                            listView1.SmallImageList.Images.Add(thumbNail);
+                        }catch (Exception ex)
+                        {
 
-                            ListViewItemPhoto item = sortedPhotos[i];
-                            item.ImageIndex = i - skipped;
-                            item.Text = Path.GetFileName(sortedPhotos[i].FilePath);
-                            item.SubItems.Add(item.Date.ToString("dd-MM-yyyy HH:mm:ss"));
-
-                            items.Add(item);
+                            Debug.WriteLine(ex.Message + ": " + sortedPhotos[i].FilePath);
                         }
 
                     }
@@ -305,35 +316,38 @@ namespace PhotoSelector
         {
             FileStream fs = File.OpenRead(path);
             // Last parameter tells GDI+ not the load the actual image data
-            Image img = Image.FromStream(fs, false, false);
+            Image img = null;
+            Image returnImage = null;
+            using (img = Image.FromStream(fs, false, false))
+            {
 
+                // GDI+ throws an error if we try to read a property when the image
+                // doesn't have that property. Check to make sure the thumbnail property
+                // item exists.
+                bool propertyFound = false;
+                for (int i = 0; i < img.PropertyIdList.Length; i++)
+                    if (img.PropertyIdList[i] == THUMBNAIL_DATA)
+                    {
+                        propertyFound = true;
+                        break;
+                    }
 
-            // GDI+ throws an error if we try to read a property when the image
-            // doesn't have that property. Check to make sure the thumbnail property
-            // item exists.
-            bool propertyFound = false;
-            for (int i = 0; i < img.PropertyIdList.Length; i++)
-                if (img.PropertyIdList[i] == THUMBNAIL_DATA)
-                {
-                    propertyFound = true;
-                    break;
-                }
+                if (!propertyFound)
+                    return null;
 
-            if (!propertyFound)
-                return null;
+                PropertyItem p = img.GetPropertyItem(THUMBNAIL_DATA);
+                fs.Close();
 
-            PropertyItem p = img.GetPropertyItem(THUMBNAIL_DATA);
-            fs.Close();
-            img.Dispose();
+                // The image data is in the form of a byte array. Write all 
+                // the bytes to a stream and create a new image from that stream
+                byte[] imageBytes = p.Value;
+                MemoryStream stream = new MemoryStream(imageBytes.Length);
+                stream.Write(imageBytes, 0, imageBytes.Length);
 
+                returnImage = Image.FromStream(stream);
+            }
 
-            // The image data is in the form of a byte array. Write all 
-            // the bytes to a stream and create a new image from that stream
-            byte[] imageBytes = p.Value;
-            MemoryStream stream = new MemoryStream(imageBytes.Length);
-            stream.Write(imageBytes, 0, imageBytes.Length);
-
-            return Image.FromStream(stream);
+            return returnImage;
         }
 
         private void Form1_Load(object sender, EventArgs e)
